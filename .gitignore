@@ -1,0 +1,8 @@
+node_modules/
+.env
+.next/
+dist/
+artifacts/
+cache/
+typechain-types/
+coverage/
