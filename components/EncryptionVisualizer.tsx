@@ -1,37 +1,33 @@
 'use client';
 
-// 5-stage pipeline: Plaintext → ECIES → IPFS → FHE → On-chain
-export type Stage = 0 | 1 | 2 | 3 | 4;
+// 4-stage pipeline: Plaintext → ECIES → IPFS → On-chain (Sepolia)
+export type Stage = 0 | 1 | 2 | 3;
 
 type EncryptionVisualizerProps = {
   plaintext: string;
   eciesBlob: string;
   ipfsCid: string;
-  fheBlob: string;
   stage: Stage;
 };
 
 const STAGES: { label: string; color: string }[] = [
   { label: 'Plaintext', color: 'text-white' },
   { label: 'ECIES Encrypted', color: 'text-yellow-400' },
-  { label: 'IPFS Uploaded', color: 'text-blue-400' },
-  { label: 'FHE Wrapped CID', color: 'text-purple-400' },
-  { label: 'On-chain', color: 'text-green-400' },
+  { label: 'Uploaded to IPFS', color: 'text-blue-400' },
+  { label: 'CID stored on Sepolia', color: 'text-green-400' },
 ];
 
 export default function EncryptionVisualizer({
   plaintext,
   eciesBlob,
   ipfsCid,
-  fheBlob,
   stage,
 }: EncryptionVisualizerProps) {
   const previews = [
     plaintext || '(type your prompt above)',
     eciesBlob ? `${eciesBlob.slice(0, 80)}…` : 'Encrypting with buyer public key...',
     ipfsCid || 'Uploading to IPFS...',
-    fheBlob ? `CID chunk ctHash: ${fheBlob.slice(0, 40)}…` : 'Wrapping CID with FHE...',
-    fheBlob ? `On-chain: 3 × euint128 ctHash\nCID chunk 0: ${fheBlob.slice(0, 40)}…` : 'Submitting transaction...',
+    ipfsCid ? `CID on Sepolia: ${ipfsCid}` : 'Submitting transaction...',
   ];
 
   return (
@@ -46,7 +42,7 @@ export default function EncryptionVisualizer({
                 i < stage
                   ? 'bg-green-800 text-green-300'
                   : i === stage
-                  ? 'bg-purple-700 text-white'
+                  ? 'bg-blue-700 text-white'
                   : 'bg-gray-800 text-gray-600'
               }`}
             >

@@ -1,13 +1,11 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
+import { useAccount, usePublicClient } from 'wagmi';
 import Navbar from '@/components/Navbar';
 import ListingCard from '@/components/ListingCard';
 import PromptModal from '@/components/PromptModal';
-import { useListings, useSubmitBid, ABI, CONTRACT_ADDRESS, type ListingView } from '@/lib/contract';
-import { fhenixHelium } from '@/lib/contract';
-import { createFheClient, decryptCidChunks, encryptBidForContract } from '@/lib/fhe';
+import { useListings, useBuyPrompt, ABI, CONTRACT_ADDRESS, type ListingView } from '@/lib/contract';
 import { eciesDecrypt, fetchFromIPFS } from '@/lib/ecies';
 import { computeConfidence } from '@/lib/scoring';
 
@@ -34,12 +32,11 @@ function buildSellerStats(listings: ListingView[]): Map<string, { avgRating: num
 
 export default function BrowsePage() {
   const { address } = useAccount();
-  const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
   const { data: rawListings } = useListings();
   const listings = (rawListings ?? []) as ListingView[];
 
-  const { writeContractAsync: submitBidTx } = useSubmitBid();
+  const { writeContractAsync: buyPromptTx } = useBuyPrompt();
 
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState<SortKey>('confidence');
@@ -68,34 +65,27 @@ export default function BrowsePage() {
     });
   }, [listings, filter, sort, sellerStats]);
 
-  // Core FHE demo: encrypt bid → submit alongside msg.value →
-  // CoFHE coprocessor runs FHE.gte(bid, price) + FHE.req() on-chain.
-  // Reverts without revealing price if bid too low.
   const handleBid = async (listingId: bigint, bidWei: bigint) => {
-    if (!address || !walletClient || !publicClient) {
+    if (!address) {
       setStatus('Connect your wallet first.');
       return;
     }
     setBiddingId(listingId);
     try {
-      setStatus('Encrypting bid with CoFHE...');
-      const client = await createFheClient(walletClient, publicClient);
-      const [ctHash, securityZone, utype, signature] = await encryptBidForContract(client, bidWei);
-
-      setStatus('Verifying bid on-chain (FHE.gte + FHE.req via CoFHE)...');
-      await submitBidTx({
+      setStatus('Submitting purchase to Sepolia...');
+      await buyPromptTx({
         address: CONTRACT_ADDRESS,
         abi: ABI,
-        functionName: 'submitBid',
-        args: [listingId, { ctHash, securityZone, utype, signature }],
+        functionName: 'buyPrompt',
+        args: [listingId],
         value: bidWei,
       });
 
-      setStatus('Bid accepted! Go to My Prompts to reveal the prompt.');
+      setStatus('Purchase accepted! Go to My Prompts to reveal the prompt.');
     } catch (e: any) {
       const msg = (e.message ?? '').toLowerCase();
-      if (msg.includes('revert') || msg.includes('fhe') || msg.includes('req')) {
-        setStatus('Bid too low — try a higher amount. The actual price stays hidden.');
+      if (msg.includes('insufficient')) {
+        setStatus('Insufficient payment — the price shown is the minimum.');
       } else if (msg.includes('reject') || msg.includes('denied')) {
         setStatus('Transaction rejected by wallet.');
       } else {
@@ -107,21 +97,17 @@ export default function BrowsePage() {
   };
 
   const handleReveal = async (listingId: bigint) => {
-    if (!address || !walletClient || !publicClient) return;
+    if (!address || !publicClient) return;
     setRevealingId(listingId);
     try {
-      setStatus('Fetching FHE-encrypted CID chunks...');
-      const [chunk0, chunk1, chunk2] = await publicClient.readContract({
+      setStatus('Fetching IPFS CID from contract...');
+      const cid = await publicClient.readContract({
         address: CONTRACT_ADDRESS,
         abi: ABI,
-        functionName: 'getPromptCt',
+        functionName: 'getPromptCID',
         args: [listingId],
         account: address,
-      }) as [`0x${string}`, `0x${string}`, `0x${string}`];
-
-      setStatus('Decrypting IPFS CID via CoFHE coprocessor...');
-      const client = await createFheClient(walletClient, publicClient);
-      const cid = await decryptCidChunks(client, chunk0, chunk1, chunk2, fhenixHelium.id, address);
+      }) as string;
 
       setStatus(`Fetching ECIES blob from IPFS (${cid.slice(0, 12)}...)...`);
       const eciesHex = await fetchFromIPFS(cid);
@@ -144,14 +130,13 @@ export default function BrowsePage() {
       <main className="max-w-6xl mx-auto px-4 py-10">
         <h1 className="text-3xl font-bold text-white mb-2">Browse Prompts</h1>
         <p className="text-gray-400 mb-2">
-          All prompts are FHE + ECIES double-encrypted. Prices are hidden — submit a bid and the
-          CoFHE coprocessor compares encrypted values on-chain.
+          All prompts are ECIES-encrypted. Buy a prompt to get the IPFS CID, then decrypt via MetaMask.
         </p>
 
-        {/* FHE computation explainer */}
-        <div className="mb-8 bg-purple-950 border border-purple-800 rounded-lg px-4 py-3 text-xs text-purple-300 font-mono">
-          ⚡ <strong>Real FHE computation:</strong>{' '}
-          FHE.gte(encryptedBid, encryptedPrice) + FHE.req() — contract never decrypts either value
+        {/* Architecture explainer */}
+        <div className="mb-8 bg-blue-950 border border-blue-800 rounded-lg px-4 py-3 text-xs text-blue-300 font-mono">
+          ⚡ <strong>ECIES + IPFS:</strong>{' '}
+          Seller encrypts prompt → uploads to IPFS → stores CID on Sepolia. Only buyers can fetch and decrypt.
         </div>
 
         {status && (

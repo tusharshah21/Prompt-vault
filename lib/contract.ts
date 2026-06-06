@@ -1,32 +1,24 @@
 import { useReadContract, useWriteContract } from 'wagmi';
 import type { Chain } from 'viem';
 
-export const fhenixHelium: Chain = {
-  id: 8008135,
-  name: 'Fhenix Helium',
-  nativeCurrency: { name: 'tFHE', symbol: 'tFHE', decimals: 18 },
+export const sepolia: Chain = {
+  id: 11155111,
+  name: 'Sepolia',
+  nativeCurrency: { name: 'Sepolia ETH', symbol: 'ETH', decimals: 18 },
   rpcUrls: {
-    default: { http: ['https://api.helium.fhenix.zone'] },
+    default: { http: ['https://rpc.sepolia.org'] },
   },
   blockExplorers: {
     default: {
-      name: 'Fhenix Explorer',
-      url: 'https://explorer.helium.fhenix.zone',
+      name: 'Etherscan',
+      url: 'https://sepolia.etherscan.io',
     },
   },
 };
 
-// Fill in after running: npm run deploy:helium
+// Deployed to Sepolia: npm run deploy:sepolia
 export const CONTRACT_ADDRESS =
-  '0x0000000000000000000000000000000000000000' as `0x${string}`;
-
-// InEuint128 Solidity struct: { ctHash: uint256, securityZone: uint8, utype: uint8, signature: bytes }
-const IN_EUINT128_COMPONENTS = [
-  { name: 'ctHash', type: 'uint256' },
-  { name: 'securityZone', type: 'uint8' },
-  { name: 'utype', type: 'uint8' },
-  { name: 'signature', type: 'bytes' },
-] as const;
+  '0x7669c350AfD256FD585a656AFD322E48f27eeA43' as `0x${string}`;
 
 export const ABI = [
   {
@@ -34,10 +26,8 @@ export const ABI = [
     type: 'function',
     stateMutability: 'nonpayable',
     inputs: [
-      { name: 'cidChunk0', type: 'tuple', components: IN_EUINT128_COMPONENTS },
-      { name: 'cidChunk1', type: 'tuple', components: IN_EUINT128_COMPONENTS },
-      { name: 'cidChunk2', type: 'tuple', components: IN_EUINT128_COMPONENTS },
-      { name: 'encryptedPrice', type: 'tuple', components: IN_EUINT128_COMPONENTS },
+      { name: 'ipfsCID', type: 'string' },
+      { name: 'price', type: 'uint256' },
       { name: 'title', type: 'string' },
       { name: 'category', type: 'string' },
       { name: 'specificityScore', type: 'uint8' },
@@ -47,28 +37,18 @@ export const ABI = [
     outputs: [],
   },
   {
-    // Core FHE demo: encrypted bid compared against encrypted price on-chain.
-    // FHE.gte(bid, price) + FHE.req() enforced by CoFHE coprocessor.
-    // Reverts (returning msg.value) if bid < price without revealing either value.
-    name: 'submitBid',
+    name: 'buyPrompt',
     type: 'function',
     stateMutability: 'payable',
-    inputs: [
-      { name: 'listingId', type: 'uint256' },
-      { name: 'encryptedBid', type: 'tuple', components: IN_EUINT128_COMPONENTS },
-    ],
+    inputs: [{ name: 'listingId', type: 'uint256' }],
     outputs: [],
   },
   {
-    name: 'getPromptCt',
+    name: 'getPromptCID',
     type: 'function',
     stateMutability: 'view',
     inputs: [{ name: 'listingId', type: 'uint256' }],
-    outputs: [
-      { name: 'chunk0', type: 'bytes32' },
-      { name: 'chunk1', type: 'bytes32' },
-      { name: 'chunk2', type: 'bytes32' },
-    ],
+    outputs: [{ name: '', type: 'string' }],
   },
   {
     name: 'ratePrompt',
@@ -94,6 +74,7 @@ export const ABI = [
         components: [
           { name: 'id', type: 'uint256' },
           { name: 'seller', type: 'address' },
+          { name: 'price', type: 'uint256' },
           { name: 'isActive', type: 'bool' },
           { name: 'title', type: 'string' },
           { name: 'category', type: 'string' },
@@ -159,6 +140,7 @@ export const ABI = [
 export type ListingView = {
   id: bigint;
   seller: `0x${string}`;
+  price: bigint;
   isActive: boolean;
   title: string;
   category: string;
@@ -209,7 +191,7 @@ export function useListPrompt() {
   return useWriteContract();
 }
 
-export function useSubmitBid() {
+export function useBuyPrompt() {
   return useWriteContract();
 }
 

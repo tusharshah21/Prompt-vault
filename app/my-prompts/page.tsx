@@ -14,8 +14,6 @@ import {
   CONTRACT_ADDRESS,
   type ListingView,
 } from '@/lib/contract';
-import { fhenixHelium } from '@/lib/contract';
-import { createFheClient, decryptCidChunks } from '@/lib/fhe';
 import { eciesDecrypt, fetchFromIPFS } from '@/lib/ecies';
 
 function StarPicker({
@@ -81,18 +79,14 @@ function PurchasedListing({
     if (!walletClient || !publicClient) return;
     setRevealing(true);
     try {
-      setStatus('Fetching FHE-encrypted CID chunks...');
-      const [chunk0, chunk1, chunk2] = await publicClient.readContract({
+      setStatus('Fetching IPFS CID from contract...');
+      const cid = await publicClient.readContract({
         address: CONTRACT_ADDRESS,
         abi: ABI,
-        functionName: 'getPromptCt',
+        functionName: 'getPromptCID',
         args: [listing.id],
         account: address,
-      }) as [`0x${string}`, `0x${string}`, `0x${string}`];
-
-      setStatus('Decrypting CID via CoFHE coprocessor...');
-      const client = await createFheClient(walletClient, publicClient);
-      const cid = await decryptCidChunks(client, chunk0, chunk1, chunk2, fhenixHelium.id, address);
+      }) as string;
 
       setStatus('Fetching ECIES blob from IPFS...');
       const eciesHex = await fetchFromIPFS(cid);
@@ -220,7 +214,7 @@ export default function MyPromptsPage() {
       <Navbar />
       <main className="max-w-6xl mx-auto px-4 py-10">
         <h1 className="text-3xl font-bold text-white mb-2">My Prompts</h1>
-        <p className="text-gray-400 mb-8">Prompts you have purchased. Click reveal to decrypt via FHE + MetaMask.</p>
+        <p className="text-gray-400 mb-8">Prompts you have purchased. Click reveal to decrypt via MetaMask.</p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {listings.map((listing) => (

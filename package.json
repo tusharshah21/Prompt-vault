@@ -7,12 +7,11 @@
     "build": "next build",
     "start": "next start",
     "compile": "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json hardhat compile",
-    "deploy:helium": "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json hardhat run scripts/deploy.ts --network helium",
+    "deploy:sepolia": "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json hardhat run scripts/deploy.ts --network sepolia",
     "test:contract": "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json hardhat test",
     "lint": "next lint"
   },
   "dependencies": {
-    "@cofhe/sdk": "^0.6.0",
     "@metamask/eth-sig-util": "^7.0.3",
     "@rainbow-me/rainbowkit": "^2.1.6",
     "@tanstack/react-query": "^5.59.20",
@@ -27,8 +26,6 @@
     "wagmi": "^2.12.29"
   },
   "devDependencies": {
-    "@cofhe/hardhat-plugin": "^0.4.0",
-    "@fhenixprotocol/cofhe-contracts": "^0.1.4",
     "@nomicfoundation/hardhat-toolbox": "^6.1.2",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.12",

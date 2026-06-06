@@ -1,12 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAccount, usePublicClient, useWalletClient } from 'wagmi';
+import { useAccount } from 'wagmi';
 import { parseEther } from 'viem';
 import Navbar from '@/components/Navbar';
 import EncryptionVisualizer, { type Stage } from '@/components/EncryptionVisualizer';
 import { useListPrompt, CONTRACT_ADDRESS, ABI } from '@/lib/contract';
-import { createFheClient, encryptCidForContract, encryptBidForContract } from '@/lib/fhe';
 import { eciesEncrypt, uploadToIPFS, DEMO_BUYER_PUBLIC_KEY } from '@/lib/ecies';
 import {
   computeSpecificity,
@@ -45,8 +44,6 @@ function ScoreBar({ label, value, color }: { label: string; value: number; color
 
 export default function SellPage() {
   const { address } = useAccount();
-  const { data: walletClient } = useWalletClient();
-  const publicClient = usePublicClient();
 
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('productivity');
@@ -56,7 +53,6 @@ export default function SellPage() {
   const [stage, setStage] = useState<Stage>(0);
   const [eciesBlob, setEciesBlob] = useState('');
   const [ipfsCid, setIpfsCid] = useState('');
-  const [fheBlob, setFheBlob] = useState('');
   const [status, setStatus] = useState('');
   const [done, setDone] = useState(false);
 
@@ -94,12 +90,11 @@ export default function SellPage() {
     setPromptText('');
     setEciesBlob('');
     setIpfsCid('');
-    setFheBlob('');
     setScores({ specificity: 0, complexity: 0, confidence: 0, badges: [], badgesMask: 0 });
   };
 
   const handleList = async () => {
-    if (!address || !walletClient || !publicClient) {
+    if (!address) {
       setStatus('Connect your wallet first.');
       return;
     }
@@ -123,24 +118,14 @@ export default function SellPage() {
       setIpfsCid(cid);
 
       setStage(3);
-      setStatus('FHE-encrypting IPFS CID + price (CoFHE coprocessor)...');
-      const client = await createFheClient(walletClient, publicClient);
-      const [chunk0, chunk1, chunk2] = await encryptCidForContract(client, cid);
-      // Encrypt price so the blockchain never sees it in plaintext — FHE comparison on submitBid
-      const encPrice = await encryptBidForContract(client, parseEther(priceEth));
-      setFheBlob('0x' + chunk0[0].toString(16));
-
-      setStage(4);
-      setStatus('Submitting transaction to Fhenix Helium...');
+      setStatus('Submitting transaction to Sepolia...');
       await listPrompt({
         address: CONTRACT_ADDRESS,
         abi: ABI,
         functionName: 'listPrompt',
         args: [
-          { ctHash: chunk0[0], securityZone: chunk0[1], utype: chunk0[2], signature: chunk0[3] },
-          { ctHash: chunk1[0], securityZone: chunk1[1], utype: chunk1[2], signature: chunk1[3] },
-          { ctHash: chunk2[0], securityZone: chunk2[1], utype: chunk2[2], signature: chunk2[3] },
-          { ctHash: encPrice[0], securityZone: encPrice[1], utype: encPrice[2], signature: encPrice[3] },
+          cid,
+          parseEther(priceEth),
           title,
           category,
           scores.specificity,
@@ -163,7 +148,7 @@ export default function SellPage() {
       <main className="max-w-6xl mx-auto px-4 py-10">
         <h1 className="text-3xl font-bold text-white mb-2">List a Prompt</h1>
         <p className="text-gray-400 mb-8">
-          Prompts are ECIES-encrypted, uploaded to IPFS, and the CID is FHE-protected on Fhenix.
+          Prompts are ECIES-encrypted, uploaded to IPFS, and the CID is stored on Sepolia.
         </p>
 
         <div className="flex gap-8 flex-col lg:flex-row">
@@ -205,7 +190,7 @@ export default function SellPage() {
                     </select>
                   </div>
                   <div className="flex-1">
-                    <label className="block text-sm text-gray-300 mb-1.5">Min price (tFHE) — hidden from buyers 🔒</label>
+                    <label className="block text-sm text-gray-300 mb-1.5">Price (ETH)</label>
                     <input
                       value={priceEth}
                       onChange={(e) => setPriceEth(e.target.value)}
@@ -223,7 +208,7 @@ export default function SellPage() {
                     value={promptText}
                     onChange={(e) => {
                       setPromptText(e.target.value);
-                      if (stage > 0) { setStage(0); setEciesBlob(''); setIpfsCid(''); setFheBlob(''); }
+                      if (stage > 0) { setStage(0); setEciesBlob(''); setIpfsCid(''); }
                     }}
                     placeholder="Write your prompt here. Only buyers can decrypt it."
                     rows={7}
@@ -264,10 +249,9 @@ export default function SellPage() {
                   className="bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors"
                 >
                   {stage === 0 && 'Encrypt & List Prompt'}
-                  {stage === 1 && 'Step 1/4: ECIES Encrypting...'}
-                  {stage === 2 && 'Step 2/4: Uploading to IPFS...'}
-                  {stage === 3 && 'Step 3/4: FHE Wrapping CID...'}
-                  {stage === 4 && 'Step 4/4: Submitting tx...'}
+                  {stage === 1 && 'Step 1/3: ECIES Encrypting...'}
+                  {stage === 2 && 'Step 2/3: Uploading to IPFS...'}
+                  {stage === 3 && 'Step 3/3: Submitting to Sepolia...'}
                 </button>
               </>
             )}
@@ -278,7 +262,6 @@ export default function SellPage() {
               plaintext={promptText}
               eciesBlob={eciesBlob}
               ipfsCid={ipfsCid}
-              fheBlob={fheBlob}
               stage={stage}
             />
           </div>

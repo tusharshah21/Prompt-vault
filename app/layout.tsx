@@ -8,7 +8,7 @@ import {
   connectorsForWallets,
 } from '@rainbow-me/rainbowkit';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fhenixHelium } from '@/lib/contract';
+import { sepolia } from '@/lib/contract';
 import '@rainbow-me/rainbowkit/styles.css';
 
 const { wallets } = getDefaultWallets();
@@ -18,9 +18,9 @@ const connectors = connectorsForWallets(wallets, {
 });
 
 const wagmiConfig = createConfig({
-  chains: [fhenixHelium],
+  chains: [sepolia],
   connectors,
-  transports: { [fhenixHelium.id]: http() },
+  transports: { [sepolia.id]: http() },
 });
 
 const queryClient = new QueryClient();
