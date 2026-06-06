@@ -95,6 +95,11 @@ contract PromptMarketplace {
     // Returns the IPFS CID so the buyer can fetch and decrypt the ECIES blob.
     // Requires purchase — the CID is the only gate needed since the blob is
     // ECIES-encrypted and only the buyer's MetaMask key can decrypt it.
+    function deactivateListing(uint256 listingId) external {
+        require(listings[listingId].seller == msg.sender, "Not seller");
+        listings[listingId].isActive = false;
+    }
+
     function getPromptCID(uint256 listingId) external view returns (string memory) {
         require(hasPurchased[listingId][msg.sender], "Not purchased");
         return listings[listingId].ipfsCID;
@@ -120,10 +125,17 @@ contract PromptMarketplace {
     }
 
     function getListings() external view returns (ListingView[] memory) {
-        ListingView[] memory result = new ListingView[](listingCount);
+        // Count active listings first
+        uint256 activeCount = 0;
         for (uint256 i = 0; i < listingCount; i++) {
+            if (listings[i].isActive) activeCount++;
+        }
+        ListingView[] memory result = new ListingView[](activeCount);
+        uint256 idx = 0;
+        for (uint256 i = 0; i < listingCount; i++) {
+            if (!listings[i].isActive) continue;
             Listing storage l = listings[i];
-            result[i] = ListingView({
+            result[idx++] = ListingView({
                 id: i,
                 seller: l.seller,
                 price: l.price,

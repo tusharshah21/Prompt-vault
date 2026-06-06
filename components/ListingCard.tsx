@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { parseEther } from 'viem';
+import { formatEther, parseEther } from 'viem';
 import { maskToBadges, computeConfidence } from '@/lib/scoring';
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -16,7 +16,9 @@ type ListingCardProps = {
   title: string;
   category: string;
   seller: string;
+  price: bigint;
   isPurchased: boolean;
+  isOwnListing: boolean;
   isBidding: boolean;
   onBid: (listingId: bigint, bidWei: bigint) => void;
   specificityScore: number;
@@ -57,7 +59,9 @@ export default function ListingCard({
   title,
   category,
   seller,
+  price,
   isPurchased,
+  isOwnListing,
   isBidding,
   onBid,
   specificityScore,
@@ -70,7 +74,7 @@ export default function ListingCard({
   sellerAvgRating,
   isVerifiedSeller,
 }: ListingCardProps) {
-  const [bidAmount, setBidAmount] = useState('0.001');
+  const [bidAmount, setBidAmount] = useState(() => formatEther(price));
   const categoryColor = CATEGORY_COLORS[category] ?? 'bg-gray-800 text-gray-300';
   const badges = maskToBadges(structureBadges);
 
@@ -159,16 +163,21 @@ export default function ListingCard({
         {seller.slice(0, 6)}…{seller.slice(-4)}
       </p>
 
-      {/* Bid section — hidden price, FHE-enforced comparison */}
-      {isPurchased ? (
+      {/* Bid section */}
+      {isOwnListing ? (
+        <div className="pt-2 border-t border-gray-800">
+          <span className="text-xs text-purple-400 font-medium">Your listing</span>
+        </div>
+      ) : isPurchased ? (
         <div className="pt-2 border-t border-gray-800">
           <span className="text-xs text-green-400 font-medium">✓ Purchased</span>
         </div>
       ) : (
         <div className="pt-2 border-t border-gray-800 flex flex-col gap-2">
-          <p className="text-xs text-gray-500">
-            🔒 Minimum bid hidden — seller keeps price private
-          </p>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-400">Price</span>
+            <span className="text-sm font-mono font-semibold text-white">{formatEther(price)} ETH</span>
+          </div>
           <div className="flex items-center gap-2">
             <input
               type="number"
@@ -178,9 +187,9 @@ export default function ListingCard({
               onChange={(e) => setBidAmount(e.target.value)}
               disabled={isBidding}
               className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-purple-600 disabled:opacity-50"
-              placeholder="0.001"
+              placeholder={formatEther(price)}
             />
-            <span className="text-xs text-gray-500 shrink-0">tFHE</span>
+            <span className="text-xs text-gray-500 shrink-0">ETH</span>
             <button
               onClick={handleBid}
               disabled={isBidding}
@@ -188,11 +197,11 @@ export default function ListingCard({
             >
               {isBidding ? (
                 <>
-                  <span className="animate-pulse">⚡</span>
-                  Verifying...
+                  <span className="animate-pulse">⏳</span>
+                  Buying...
                 </>
               ) : (
-                '🔒 Bid'
+                'Buy'
               )}
             </button>
           </div>

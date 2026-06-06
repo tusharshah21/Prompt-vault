@@ -8,6 +8,7 @@
     "start": "next start",
     "compile": "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json hardhat compile",
     "deploy:sepolia": "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json hardhat run scripts/deploy.ts --network sepolia",
+    "seed": "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json hardhat run scripts/seed.ts --network sepolia",
     "test:contract": "cross-env TS_NODE_PROJECT=tsconfig.hardhat.json hardhat test",
     "lint": "next lint"
   },
@@ -27,11 +28,13 @@
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^6.1.2",
+    "@types/form-data": "^2.5.0",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "autoprefixer": "^10.4.20",
     "cross-env": "^7.0.3",
+    "form-data": "^4.0.5",
     "hardhat": "^2.22.3",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.16",

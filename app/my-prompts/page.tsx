@@ -133,7 +133,9 @@ function PurchasedListing({
         title={listing.title}
         category={listing.category}
         seller={listing.seller}
+        price={listing.price}
         isPurchased
+        isOwnListing={false}
         isBidding={false}
         onBid={() => {}}
         specificityScore={listing.specificityScore}

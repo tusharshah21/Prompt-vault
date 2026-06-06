@@ -6,7 +6,7 @@ export const sepolia: Chain = {
   name: 'Sepolia',
   nativeCurrency: { name: 'Sepolia ETH', symbol: 'ETH', decimals: 18 },
   rpcUrls: {
-    default: { http: ['https://rpc.sepolia.org'] },
+    default: { http: ['https://ethereum-sepolia-rpc.publicnode.com'] },
   },
   blockExplorers: {
     default: {
@@ -18,7 +18,7 @@ export const sepolia: Chain = {
 
 // Deployed to Sepolia: npm run deploy:sepolia
 export const CONTRACT_ADDRESS =
-  '0x7669c350AfD256FD585a656AFD322E48f27eeA43' as `0x${string}`;
+  '0xE8225344c716133Cd687206A23Ae9Eb825Ba8a1f' as `0x${string}`;
 
 export const ABI = [
   {
@@ -34,6 +34,13 @@ export const ABI = [
       { name: 'complexityScore', type: 'uint8' },
       { name: 'structureBadges', type: 'uint8' },
     ],
+    outputs: [],
+  },
+  {
+    name: 'deactivateListing',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'listingId', type: 'uint256' }],
     outputs: [],
   },
   {
@@ -158,6 +165,7 @@ export function useListings() {
     address: CONTRACT_ADDRESS,
     abi: ABI,
     functionName: 'getListings',
+    query: { refetchInterval: 5_000 },
   });
 }
 
@@ -192,6 +200,10 @@ export function useListPrompt() {
 }
 
 export function useBuyPrompt() {
+  return useWriteContract();
+}
+
+export function useDeactivateListing() {
   return useWriteContract();
 }
 

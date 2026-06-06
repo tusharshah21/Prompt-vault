@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAccount } from 'wagmi';
+import { useAccount, usePublicClient } from 'wagmi';
 import { parseEther } from 'viem';
 import Navbar from '@/components/Navbar';
 import EncryptionVisualizer, { type Stage } from '@/components/EncryptionVisualizer';
-import { useListPrompt, CONTRACT_ADDRESS, ABI } from '@/lib/contract';
-import { eciesEncrypt, uploadToIPFS, DEMO_BUYER_PUBLIC_KEY } from '@/lib/ecies';
+import { useListPrompt, useListings, useDeactivateListing, CONTRACT_ADDRESS, ABI, type ListingView } from '@/lib/contract';
+import { formatEther } from 'viem';
+import { eciesEncrypt, uploadToIPFS } from '@/lib/ecies';
 import {
   computeSpecificity,
   computeComplexity,
@@ -44,6 +45,30 @@ function ScoreBar({ label, value, color }: { label: string; value: number; color
 
 export default function SellPage() {
   const { address } = useAccount();
+  const publicClient = usePublicClient();
+  const { data: rawListings, refetch: refetchListings } = useListings();
+  const myListings = ((rawListings ?? []) as ListingView[]).filter(
+    (l) => l.seller.toLowerCase() === (address ?? '').toLowerCase()
+  );
+
+  const { writeContractAsync: deactivateTx } = useDeactivateListing();
+  const [deactivating, setDeactivating] = useState<bigint | null>(null);
+  const [deactivateStatus, setDeactivateStatus] = useState('');
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const handleDeactivate = async (listingId: bigint) => {
+    setDeactivating(listingId);
+    setDeactivateStatus('');
+    try {
+      await deactivateTx({ address: CONTRACT_ADDRESS, abi: ABI, functionName: 'deactivateListing', args: [listingId] });
+      setDeactivateStatus('Listing deactivated.');
+    } catch (e: any) {
+      setDeactivateStatus(`Error: ${e.message}`);
+    } finally {
+      setDeactivating(null);
+    }
+  };
 
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('productivity');
@@ -55,6 +80,8 @@ export default function SellPage() {
   const [ipfsCid, setIpfsCid] = useState('');
   const [status, setStatus] = useState('');
   const [done, setDone] = useState(false);
+  const [encKey, setEncKey] = useState<string | null>(null);
+  const [encKeyError, setEncKeyError] = useState(false);
 
   const [scores, setScores] = useState<Scores>({
     specificity: 0,
@@ -83,6 +110,22 @@ export default function SellPage() {
 
   const { writeContractAsync: listPrompt } = useListPrompt();
 
+  // Fetch the connected wallet's MetaMask encryption public key.
+  // Required before encrypting — ensures only this wallet can eth_decrypt the prompt.
+  const fetchEncryptionKey = async () => {
+    if (!address || !(window as any).ethereum) return;
+    setEncKeyError(false);
+    try {
+      const key = await (window as any).ethereum.request({
+        method: 'eth_getEncryptionPublicKey',
+        params: [address],
+      }) as string;
+      setEncKey(key);
+    } catch {
+      setEncKeyError(true);
+    }
+  };
+
   const reset = () => {
     setDone(false);
     setStage(0);
@@ -106,10 +149,27 @@ export default function SellPage() {
 
     try {
       setStage(1);
-      setStatus('Encrypting with ECIES (buyer public key)...');
+      // Fetch the buyer's real MetaMask encryption public key so only they can decrypt.
+      // eth_getEncryptionPublicKey requires a MetaMask confirmation from the connected wallet.
+      let buyerPublicKey = encKey;
+      if (!buyerPublicKey) {
+        setStatus('Requesting your encryption public key from MetaMask...');
+        try {
+          buyerPublicKey = await (window as any).ethereum.request({
+            method: 'eth_getEncryptionPublicKey',
+            params: [address],
+          }) as string;
+          setEncKey(buyerPublicKey);
+        } catch {
+          setStatus('MetaMask key request denied. Cannot encrypt prompt.');
+          setStage(0);
+          return;
+        }
+      }
+      setStatus('Encrypting with ECIES (your wallet public key)...');
       // before encrypting: TextEncoder converts prompt string → bytes
       const promptBytes = new TextEncoder().encode(promptText);
-      const ecies = eciesEncrypt(DEMO_BUYER_PUBLIC_KEY, promptBytes);
+      const ecies = eciesEncrypt(buyerPublicKey, promptBytes);
       setEciesBlob(ecies);
 
       setStage(2);
@@ -118,8 +178,8 @@ export default function SellPage() {
       setIpfsCid(cid);
 
       setStage(3);
-      setStatus('Submitting transaction to Sepolia...');
-      await listPrompt({
+      setStatus('Step 3/3: Submitting to Sepolia...');
+      const hash = await listPrompt({
         address: CONTRACT_ADDRESS,
         abi: ABI,
         functionName: 'listPrompt',
@@ -128,14 +188,21 @@ export default function SellPage() {
           parseEther(priceEth),
           title,
           category,
-          scores.specificity,
-          scores.complexity,
+          Math.round(scores.specificity),
+          Math.round(scores.complexity),
           scores.badgesMask,
         ],
       });
 
+      // Wait for the block to be mined before refetching
+      if (hash && publicClient) {
+        setStatus('Waiting for confirmation...');
+        await publicClient.waitForTransactionReceipt({ hash });
+      }
+
       setStatus('');
       setDone(true);
+      refetchListings();
     } catch (e: any) {
       setStatus(`Error: ${e.message}`);
       setStage(0);
@@ -148,9 +215,33 @@ export default function SellPage() {
       <main className="max-w-6xl mx-auto px-4 py-10">
         <h1 className="text-3xl font-bold text-white mb-2">List a Prompt</h1>
         <p className="text-gray-400 mb-8">
-          Prompts are ECIES-encrypted, uploaded to IPFS, and the CID is stored on Sepolia.
-        </p>
+                  Prompts are ECIES-encrypted with <strong className="text-white">your wallet's public key</strong>, uploaded to IPFS, and the CID is stored on Sepolia.
+                  Only your MetaMask wallet can decrypt purchased prompts.
+                </p>
 
+                {/* Encryption key display — lets seller copy key for seed script */}
+                {mounted && address && (
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide">Your Encryption Public Key</span>
+                      {!encKey && (
+                        <button
+                          onClick={fetchEncryptionKey}
+                          className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                        >
+                          Reveal
+                        </button>
+                      )}
+                    </div>
+                    {encKey ? (
+                      <p className="text-xs font-mono text-green-400 break-all">{encKey}</p>
+                    ) : encKeyError ? (
+                      <p className="text-xs text-red-400">MetaMask denied — key needed to encrypt prompts.</p>
+                    ) : (
+                      <p className="text-xs text-gray-600">Click Reveal to fetch from MetaMask. Required before listing.</p>
+                    )}
+                  </div>
+                )}
         <div className="flex gap-8 flex-col lg:flex-row">
           <div className="flex-1 flex flex-col gap-5">
             {done ? (
@@ -266,6 +357,61 @@ export default function SellPage() {
             />
           </div>
         </div>
+
+        {/* My Listings section */}
+        {mounted && address && (
+          <div className="mt-14">
+            <h2 className="text-xl font-bold text-white mb-1">My Listings</h2>
+            <p className="text-gray-400 text-sm mb-6">Prompts you have listed on PromptVault.</p>
+
+            {deactivateStatus && (
+              <div className="mb-4 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-300 text-sm">
+                {deactivateStatus}
+              </div>
+            )}
+
+            {myListings.length === 0 ? (
+              <p className="text-gray-500 text-sm">No listings yet. Use the form above to list your first prompt.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {myListings.map((l) => {
+                  const avgRating = Number(l.totalRatings) > 0
+                    ? (Number(l.ratingSum) / Number(l.totalRatings)).toFixed(1)
+                    : '—';
+                  return (
+                    <div key={l.id.toString()} className="bg-gray-900 border border-gray-800 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className="text-white font-semibold text-sm">{l.title}</span>
+                          <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full">{l.category}</span>
+                          {!l.isActive && (
+                            <span className="text-xs bg-red-950 text-red-400 border border-red-800 px-2 py-0.5 rounded-full">Deactivated</span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-4 text-xs text-gray-400 mt-1">
+                          <span>Price: <span className="text-white font-mono">{formatEther(l.price)} ETH</span></span>
+                          <span>Sales: <span className="text-white">{l.totalRatings.toString()}</span> rated</span>
+                          <span>Avg rating: <span className="text-yellow-400">{avgRating}</span></span>
+                          <span>Specificity: <span className="text-blue-400">{l.specificityScore}</span></span>
+                          <span>ID: <span className="text-gray-500 font-mono">#{l.id.toString()}</span></span>
+                        </div>
+                      </div>
+                      {l.isActive && (
+                        <button
+                          onClick={() => handleDeactivate(l.id)}
+                          disabled={deactivating === l.id}
+                          className="text-xs bg-red-950 hover:bg-red-900 border border-red-800 text-red-400 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 shrink-0"
+                        >
+                          {deactivating === l.id ? 'Deactivating...' : 'Deactivate'}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );

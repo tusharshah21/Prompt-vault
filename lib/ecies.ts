@@ -63,12 +63,20 @@ export async function uploadToIPFS(eciesHex: string): Promise<string> {
 
 /**
  * Fetches an ECIES hex blob from IPFS by CID.
- * Returns the hex string originally uploaded by the seller.
+ * Handles both plain-text hex (browser sell flow) and
+ * JSON-wrapped { eciesHex } (seed script / pinJSONToIPFS).
  */
 export async function fetchFromIPFS(cid: string): Promise<string> {
   const res = await fetch(`https://gateway.pinata.cloud/ipfs/${cid}`);
   if (!res.ok) throw new Error(`IPFS fetch failed: ${res.statusText}`);
-  return res.text();
+  const text = await res.text();
+  try {
+    const json = JSON.parse(text);
+    if (json && typeof json.eciesHex === 'string') return json.eciesHex;
+  } catch {
+    // not JSON — fall through to return raw text
+  }
+  return text;
 }
 
 /**

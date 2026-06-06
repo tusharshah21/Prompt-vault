@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useAccount, usePublicClient } from 'wagmi';
 import Navbar from '@/components/Navbar';
 import ListingCard from '@/components/ListingCard';
@@ -45,6 +45,27 @@ export default function BrowsePage() {
   // SECURITY: plaintext in RAM only. Never persisted or sent anywhere.
   const [plaintext, setPlaintext] = useState<string | null>(null);
   const [status, setStatus] = useState('');
+  // Set of listing IDs (as strings) that the connected wallet has purchased.
+  const [purchasedIds, setPurchasedIds] = useState<Set<string>>(new Set());
+
+  // On mount / when address or listings change, check on-chain hasPurchased for all listings.
+  const checkPurchased = useCallback(async () => {
+    if (!address || !publicClient || listings.length === 0) return;
+    const results = await Promise.all(
+      listings.map((l) =>
+        publicClient.readContract({
+          address: CONTRACT_ADDRESS,
+          abi: ABI,
+          functionName: 'hasPurchased',
+          args: [l.id, address],
+        }).then((v) => ({ id: l.id.toString(), purchased: v as boolean }))
+          .catch(() => ({ id: l.id.toString(), purchased: false }))
+      )
+    );
+    setPurchasedIds(new Set(results.filter((r) => r.purchased).map((r) => r.id)));
+  }, [address, publicClient, listings]);
+
+  useEffect(() => { checkPurchased(); }, [checkPurchased]);
 
   const sellerStats = useMemo(() => buildSellerStats(listings), [listings]);
 
@@ -81,7 +102,9 @@ export default function BrowsePage() {
         value: bidWei,
       });
 
-      setStatus('Purchase accepted! Go to My Prompts to reveal the prompt.');
+      setStatus('Purchase accepted! Click "Reveal Prompt" below to decrypt it.');
+      // Mark as purchased immediately without waiting for refetch
+      setPurchasedIds((prev) => new Set([...prev, listingId.toString()]));
     } catch (e: any) {
       const msg = (e.message ?? '').toLowerCase();
       if (msg.includes('insufficient')) {
@@ -175,6 +198,8 @@ export default function BrowsePage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {sorted.map((listing) => {
             const ss = sellerStats.get(listing.seller) ?? { avgRating: 0, isVerified: false };
+            const isPurchased = purchasedIds.has(listing.id.toString());
+            const isOwnListing = !!address && listing.seller.toLowerCase() === address.toLowerCase();
             return (
               <div key={listing.id.toString()} className="flex flex-col gap-2">
                 <ListingCard
@@ -182,7 +207,9 @@ export default function BrowsePage() {
                   title={listing.title}
                   category={listing.category}
                   seller={listing.seller}
-                  isPurchased={false}
+                  price={listing.price}
+                  isPurchased={isPurchased}
+                  isOwnListing={isOwnListing}
                   isBidding={biddingId === listing.id}
                   onBid={handleBid}
                   specificityScore={listing.specificityScore}
@@ -195,13 +222,13 @@ export default function BrowsePage() {
                   sellerAvgRating={ss.avgRating}
                   isVerifiedSeller={ss.isVerified}
                 />
-                {address && (
+                {isPurchased && !isOwnListing && (
                   <button
                     onClick={() => handleReveal(listing.id)}
                     disabled={revealingId === listing.id}
-                    className="text-xs bg-gray-800 hover:bg-gray-700 text-green-300 font-mono px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                    className="text-xs bg-green-900 hover:bg-green-800 text-green-300 font-mono px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
                   >
-                    {revealingId === listing.id ? 'Unlocking...' : '🔑 Reveal Prompt'}
+                    {revealingId === listing.id ? 'Decrypting...' : '🔑 Reveal Prompt'}
                   </button>
                 )}
               </div>

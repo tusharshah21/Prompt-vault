@@ -24,7 +24,7 @@ export default function Navbar() {
       <div className="flex items-center gap-4">
         {address && balance && (
           <span className="text-sm text-gray-400 hidden md:block">
-            {parseFloat(formatEther(balance.value)).toFixed(4)} tFHE
+            {parseFloat(formatEther(balance.value)).toFixed(4)} ETH
           </span>
         )}
         <ConnectButton />
