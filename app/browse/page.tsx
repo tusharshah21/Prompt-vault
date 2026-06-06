@@ -42,13 +42,10 @@ export default function BrowsePage() {
   const [sort, setSort] = useState<SortKey>('confidence');
   const [biddingId, setBiddingId] = useState<bigint | null>(null);
   const [revealingId, setRevealingId] = useState<bigint | null>(null);
-  // SECURITY: plaintext in RAM only. Never persisted or sent anywhere.
   const [plaintext, setPlaintext] = useState<string | null>(null);
   const [status, setStatus] = useState('');
-  // Set of listing IDs (as strings) that the connected wallet has purchased.
   const [purchasedIds, setPurchasedIds] = useState<Set<string>>(new Set());
 
-  // On mount / when address or listings change, check on-chain hasPurchased for all listings.
   const checkPurchased = useCallback(async () => {
     if (!address || !publicClient || listings.length === 0) return;
     const results = await Promise.all(
@@ -78,7 +75,6 @@ export default function BrowsePage() {
         return cb - ca;
       });
     }
-    // rating
     return filtered.sort((a, b) => {
       const ra = Number(a.totalRatings) > 0 ? Number(a.ratingSum) / Number(a.totalRatings) : 0;
       const rb = Number(b.totalRatings) > 0 ? Number(b.ratingSum) / Number(b.totalRatings) : 0;
@@ -87,10 +83,7 @@ export default function BrowsePage() {
   }, [listings, filter, sort, sellerStats]);
 
   const handleBid = async (listingId: bigint, bidWei: bigint) => {
-    if (!address) {
-      setStatus('Connect your wallet first.');
-      return;
-    }
+    if (!address) { setStatus('Connect your wallet first.'); return; }
     setBiddingId(listingId);
     try {
       setStatus('Submitting purchase to Sepolia...');
@@ -101,9 +94,7 @@ export default function BrowsePage() {
         args: [listingId],
         value: bidWei,
       });
-
-      setStatus('Purchase accepted! Click "Reveal Prompt" below to decrypt it.');
-      // Mark as purchased immediately without waiting for refetch
+      setStatus('Purchase accepted. Click "Reveal" to decrypt.');
       setPurchasedIds((prev) => new Set([...prev, listingId.toString()]));
     } catch (e: any) {
       const msg = (e.message ?? '').toLowerCase();
@@ -137,7 +128,6 @@ export default function BrowsePage() {
 
       setStatus('Requesting MetaMask decryption (eth_decrypt)...');
       const decryptedBytes = await eciesDecrypt(eciesHex, address);
-      // after decrypting: TextDecoder converts bytes → plaintext string
       setPlaintext(new TextDecoder().decode(decryptedBytes));
       setStatus('');
     } catch (e: any) {
@@ -148,35 +138,48 @@ export default function BrowsePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-950">
+    <div className="min-h-screen bg-black">
       <Navbar />
-      <main className="max-w-6xl mx-auto px-4 py-10">
-        <h1 className="text-3xl font-bold text-white mb-2">Browse Prompts</h1>
-        <p className="text-gray-400 mb-2">
-          All prompts are ECIES-encrypted. Buy a prompt to get the IPFS CID, then decrypt via MetaMask.
-        </p>
 
-        {/* Architecture explainer */}
-        <div className="mb-8 bg-blue-950 border border-blue-800 rounded-lg px-4 py-3 text-xs text-blue-300 font-mono">
-          ⚡ <strong>ECIES + IPFS:</strong>{' '}
-          Seller encrypts prompt → uploads to IPFS → stores CID on Sepolia. Only buyers can fetch and decrypt.
+      <main className="max-w-6xl mx-auto px-4 py-10">
+        {/* Page header */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-6 h-px bg-white/40" />
+            <span className="text-[10px] font-mono text-white/40 uppercase tracking-widest">002</span>
+            <div className="flex-1 h-px bg-white/10" />
+          </div>
+          <h1 className="text-2xl font-mono font-bold text-white uppercase tracking-wider mb-1">
+            Browse Prompts
+          </h1>
+          <p className="text-xs font-mono text-white/40">
+            All prompts are ECIES-encrypted. Buy to receive the IPFS CID, then decrypt via MetaMask.
+          </p>
         </div>
 
+        {/* Architecture callout */}
+        <div className="mb-6 border border-white/10 px-4 py-3 text-[10px] font-mono text-white/40">
+          ⚡ ECIES + IPFS — Seller encrypts → uploads to IPFS → stores CID on Sepolia. Only buyers can fetch and decrypt.
+        </div>
+
+        {/* Status */}
         {status && (
-          <div className="mb-6 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-300 text-sm">
+          <div className="mb-6 border border-white/20 px-4 py-3 text-xs font-mono text-white/60">
             {status}
           </div>
         )}
 
         {/* Filter + Sort */}
         <div className="flex flex-col sm:flex-row gap-4 mb-8">
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-1.5 flex-wrap">
             {CATEGORIES.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setFilter(cat)}
-                className={`text-sm px-3 py-1.5 rounded-lg transition-colors ${
-                  filter === cat ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
+                className={`text-[10px] font-mono uppercase tracking-wider px-3 py-1 border transition-all ${
+                  filter === cat
+                    ? 'border-white text-white'
+                    : 'border-white/20 text-white/40 hover:border-white/50 hover:text-white/60'
                 }`}
               >
                 {cat}
@@ -187,15 +190,16 @@ export default function BrowsePage() {
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as SortKey)}
-              className="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-purple-600"
+              className="bg-black border border-white/20 text-white/50 text-[10px] font-mono uppercase tracking-wider px-3 py-1 focus:outline-none focus:border-white"
             >
-              <option value="confidence">Sort: Confidence ↓</option>
-              <option value="rating">Sort: Rating ↓</option>
+              <option value="confidence">SORT: CONFIDENCE ↓</option>
+              <option value="rating">SORT: RATING ↓</option>
             </select>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        {/* Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {sorted.map((listing) => {
             const ss = sellerStats.get(listing.seller) ?? { avgRating: 0, isVerified: false };
             const isPurchased = purchasedIds.has(listing.id.toString());
@@ -226,18 +230,21 @@ export default function BrowsePage() {
                   <button
                     onClick={() => handleReveal(listing.id)}
                     disabled={revealingId === listing.id}
-                    className="text-xs bg-green-900 hover:bg-green-800 text-green-300 font-mono px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                    className="text-[10px] font-mono border border-green-500/30 text-green-400/70 px-3 py-1.5 hover:border-green-400 hover:text-green-400 transition-all disabled:opacity-30 uppercase tracking-wider"
                   >
-                    {revealingId === listing.id ? 'Decrypting...' : '🔑 Reveal Prompt'}
+                    {revealingId === listing.id ? 'DECRYPTING...' : '🔑 REVEAL PROMPT'}
                   </button>
                 )}
               </div>
             );
           })}
+
           {sorted.length === 0 && (
-            <p className="text-gray-500 col-span-3 py-12 text-center">
-              No listings yet. Be the first to{' '}
-              <a href="/sell" className="text-purple-400 underline">sell a prompt</a>.
+            <p className="text-[10px] font-mono text-white/30 col-span-3 py-16 text-center uppercase tracking-wider">
+              No listings yet.{' '}
+              <a href="/sell" className="text-white/50 underline hover:text-white transition-colors">
+                Be the first to sell a prompt
+              </a>.
             </p>
           )}
         </div>

@@ -11,9 +11,9 @@ type EncryptionVisualizerProps = {
 };
 
 const STAGES: { label: string; color: string }[] = [
-  { label: 'Plaintext', color: 'text-white' },
-  { label: 'ECIES Encrypted', color: 'text-yellow-400' },
-  { label: 'Uploaded to IPFS', color: 'text-blue-400' },
+  { label: 'Plaintext',            color: 'text-white' },
+  { label: 'ECIES Encrypted',      color: 'text-yellow-400' },
+  { label: 'Uploaded to IPFS',     color: 'text-blue-400' },
   { label: 'CID stored on Sepolia', color: 'text-green-400' },
 ];
 
@@ -27,36 +27,46 @@ export default function EncryptionVisualizer({
     plaintext || '(type your prompt above)',
     eciesBlob ? `${eciesBlob.slice(0, 80)}…` : 'Encrypting with buyer public key...',
     ipfsCid || 'Uploading to IPFS...',
-    ipfsCid ? `CID on Sepolia: ${ipfsCid}` : 'Submitting transaction...',
+    ipfsCid ? `CID on Sepolia:\n${ipfsCid}` : 'Submitting transaction...',
   ];
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 flex flex-col gap-4 sticky top-24">
-      <h3 className="text-sm font-semibold text-gray-300">Encryption Pipeline</h3>
+    <div className="bg-black border border-white/20 p-5 flex flex-col gap-4 sticky top-24">
+      {/* Title */}
+      <div className="flex items-center gap-2">
+        <div className="w-4 h-px bg-white/40" />
+        <h3 className="text-[10px] font-mono text-white/50 uppercase tracking-widest">
+          Encryption Pipeline
+        </h3>
+      </div>
 
-      <div className="flex flex-col gap-1 text-xs">
+      {/* Stage list */}
+      <div className="flex flex-col gap-1.5 text-xs">
         {STAGES.map((s, i) => (
           <div key={i} className="flex items-center gap-2">
             <span
-              className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+              className={`w-5 h-5 flex items-center justify-center text-[10px] font-mono font-bold shrink-0 border ${
                 i < stage
-                  ? 'bg-green-800 text-green-300'
+                  ? 'border-green-500/50 text-green-400'
                   : i === stage
-                  ? 'bg-blue-700 text-white'
-                  : 'bg-gray-800 text-gray-600'
+                  ? 'border-white text-white'
+                  : 'border-white/20 text-white/20'
               }`}
             >
               {i < stage ? '✓' : i + 1}
             </span>
-            <span className={i <= stage ? s.color : 'text-gray-600'}>
+            <span className={`font-mono text-[10px] uppercase tracking-wider ${
+              i <= stage ? s.color : 'text-white/20'
+            }`}>
               {s.label}
             </span>
           </div>
         ))}
       </div>
 
+      {/* Preview */}
       <pre
-        className={`text-xs font-mono p-3 bg-gray-950 rounded-lg whitespace-pre-wrap break-all min-h-24 transition-colors ${STAGES[stage].color}`}
+        className={`text-[10px] font-mono p-3 bg-white/5 border border-white/10 whitespace-pre-wrap break-all min-h-24 transition-colors ${STAGES[stage].color}`}
       >
         {previews[stage]}
       </pre>

@@ -2,11 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useAccount, usePublicClient } from 'wagmi';
-import { parseEther } from 'viem';
+import { parseEther, formatEther } from 'viem';
 import Navbar from '@/components/Navbar';
 import EncryptionVisualizer, { type Stage } from '@/components/EncryptionVisualizer';
 import { useListPrompt, useListings, useDeactivateListing, CONTRACT_ADDRESS, ABI, type ListingView } from '@/lib/contract';
-import { formatEther } from 'viem';
 import { eciesEncrypt, uploadToIPFS } from '@/lib/ecies';
 import {
   computeSpecificity,
@@ -29,13 +28,13 @@ type Scores = {
 function ScoreBar({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex justify-between text-xs">
-        <span className="text-gray-400">{label}</span>
+      <div className="flex justify-between text-[9px] font-mono">
+        <span className="text-white/40 uppercase tracking-wider">{label}</span>
         <span className={color}>{value}</span>
       </div>
-      <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+      <div className="h-0.5 bg-white/10 overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-300 ${color.replace('text-', 'bg-')}`}
+          className={`h-full transition-all duration-300 ${color.replace('text-', 'bg-')}`}
           style={{ width: `${value}%` }}
         />
       </div>
@@ -84,14 +83,9 @@ export default function SellPage() {
   const [encKeyError, setEncKeyError] = useState(false);
 
   const [scores, setScores] = useState<Scores>({
-    specificity: 0,
-    complexity: 0,
-    confidence: 0,
-    badges: [],
-    badgesMask: 0,
+    specificity: 0, complexity: 0, confidence: 0, badges: [], badgesMask: 0,
   });
 
-  // Debounced scoring — runs on plaintext before any encryption
   useEffect(() => {
     if (!promptText) {
       setScores({ specificity: 0, complexity: 0, confidence: 0, badges: [], badgesMask: 0 });
@@ -110,8 +104,6 @@ export default function SellPage() {
 
   const { writeContractAsync: listPrompt } = useListPrompt();
 
-  // Fetch the connected wallet's MetaMask encryption public key.
-  // Required before encrypting — ensures only this wallet can eth_decrypt the prompt.
   const fetchEncryptionKey = async () => {
     if (!address || !(window as any).ethereum) return;
     setEncKeyError(false);
@@ -127,30 +119,18 @@ export default function SellPage() {
   };
 
   const reset = () => {
-    setDone(false);
-    setStage(0);
-    setTitle('');
-    setPromptText('');
-    setEciesBlob('');
-    setIpfsCid('');
+    setDone(false); setStage(0); setTitle(''); setPromptText('');
+    setEciesBlob(''); setIpfsCid('');
     setScores({ specificity: 0, complexity: 0, confidence: 0, badges: [], badgesMask: 0 });
   };
 
   const handleList = async () => {
-    if (!address) {
-      setStatus('Connect your wallet first.');
-      return;
-    }
-    if (!title || !promptText) {
-      setStatus('Title and prompt text are required.');
-      return;
-    }
+    if (!address) { setStatus('Connect your wallet first.'); return; }
+    if (!title || !promptText) { setStatus('Title and prompt text are required.'); return; }
     setDone(false);
 
     try {
       setStage(1);
-      // Fetch the buyer's real MetaMask encryption public key so only they can decrypt.
-      // eth_getEncryptionPublicKey requires a MetaMask confirmation from the connected wallet.
       let buyerPublicKey = encKey;
       if (!buyerPublicKey) {
         setStatus('Requesting your encryption public key from MetaMask...');
@@ -167,7 +147,6 @@ export default function SellPage() {
         }
       }
       setStatus('Encrypting with ECIES (your wallet public key)...');
-      // before encrypting: TextEncoder converts prompt string → bytes
       const promptBytes = new TextEncoder().encode(promptText);
       const ecies = eciesEncrypt(buyerPublicKey, promptBytes);
       setEciesBlob(ecies);
@@ -194,7 +173,6 @@ export default function SellPage() {
         ],
       });
 
-      // Wait for the block to be mined before refetching
       if (hash && publicClient) {
         setStatus('Waiting for confirmation...');
         await publicClient.waitForTransactionReceipt({ hash });
@@ -209,92 +187,112 @@ export default function SellPage() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gray-950">
-      <Navbar />
-      <main className="max-w-6xl mx-auto px-4 py-10">
-        <h1 className="text-3xl font-bold text-white mb-2">List a Prompt</h1>
-        <p className="text-gray-400 mb-8">
-                  Prompts are ECIES-encrypted with <strong className="text-white">your wallet's public key</strong>, uploaded to IPFS, and the CID is stored on Sepolia.
-                  Only your MetaMask wallet can decrypt purchased prompts.
-                </p>
+  const fieldClass = 'w-full bg-transparent border border-white/20 px-3 py-2 text-white text-xs font-mono placeholder-white/20 focus:outline-none focus:border-white transition-colors';
+  const labelClass = 'block text-[9px] font-mono text-white/40 uppercase tracking-widest mb-1.5';
 
-                {/* Encryption key display — lets seller copy key for seed script */}
-                {mounted && address && (
-                  <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide">Your Encryption Public Key</span>
-                      {!encKey && (
-                        <button
-                          onClick={fetchEncryptionKey}
-                          className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
-                        >
-                          Reveal
-                        </button>
-                      )}
-                    </div>
-                    {encKey ? (
-                      <p className="text-xs font-mono text-green-400 break-all">{encKey}</p>
-                    ) : encKeyError ? (
-                      <p className="text-xs text-red-400">MetaMask denied — key needed to encrypt prompts.</p>
-                    ) : (
-                      <p className="text-xs text-gray-600">Click Reveal to fetch from MetaMask. Required before listing.</p>
-                    )}
-                  </div>
-                )}
+  return (
+    <div className="min-h-screen bg-black">
+      <Navbar />
+
+      <main className="max-w-6xl mx-auto px-4 py-10">
+        {/* Page header */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-6 h-px bg-white/40" />
+            <span className="text-[10px] font-mono text-white/40 uppercase tracking-widest">003</span>
+            <div className="flex-1 h-px bg-white/10" />
+          </div>
+          <h1 className="text-2xl font-mono font-bold text-white uppercase tracking-wider mb-1">
+            List a Prompt
+          </h1>
+          <p className="text-xs font-mono text-white/40">
+            Prompts are ECIES-encrypted with your wallet's public key, uploaded to IPFS, and the CID is stored on Sepolia.
+          </p>
+        </div>
+
+        {/* Encryption key panel */}
+        {mounted && address && (
+          <div className="border border-white/20 p-4 flex flex-col gap-2 mb-8">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-mono text-white/40 uppercase tracking-widest">
+                Encryption Public Key
+              </span>
+              {!encKey && (
+                <button
+                  onClick={fetchEncryptionKey}
+                  className="text-[9px] font-mono text-white/40 border border-white/20 px-2 py-0.5 hover:border-white hover:text-white transition-all uppercase"
+                >
+                  Reveal
+                </button>
+              )}
+            </div>
+            {encKey ? (
+              <p className="text-[10px] font-mono text-green-400 break-all">{encKey}</p>
+            ) : encKeyError ? (
+              <p className="text-[10px] font-mono text-red-400/70">MetaMask denied — key needed to encrypt prompts.</p>
+            ) : (
+              <p className="text-[10px] font-mono text-white/20">Click Reveal to fetch from MetaMask. Required before listing.</p>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-8 flex-col lg:flex-row">
           <div className="flex-1 flex flex-col gap-5">
             {done ? (
-              <div className="bg-green-950 border border-green-700 rounded-xl p-6 text-green-300">
-                <div className="text-lg font-semibold mb-2">Prompt listed on PromptVault!</div>
-                <p className="text-sm text-green-400">
-                  Your prompt is live — double-encrypted, IPFS-stored, FHE-protected.
+              <div className="border border-green-500/30 p-6 flex flex-col gap-3">
+                <div className="text-sm font-mono text-green-400 uppercase tracking-wider">
+                  ✓ Prompt Listed on PromptVault
+                </div>
+                <p className="text-xs font-mono text-white/40">
+                  Your prompt is live — ECIES-encrypted, IPFS-stored, CID on Sepolia.
                 </p>
                 <button
                   onClick={reset}
-                  className="mt-4 text-sm bg-green-800 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors"
+                  className="w-fit text-[10px] font-mono border border-white/20 text-white/50 px-4 py-2 hover:border-white hover:text-white transition-all uppercase tracking-wider mt-1"
                 >
-                  List another
+                  List Another
                 </button>
               </div>
             ) : (
               <>
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1.5">Title</label>
+                  <label className={labelClass}>Title</label>
                   <input
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="e.g. Ultimate code reviewer prompt"
-                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-purple-600"
+                    className={fieldClass}
                   />
                 </div>
 
                 <div className="flex gap-4">
                   <div className="flex-1">
-                    <label className="block text-sm text-gray-300 mb-1.5">Category</label>
+                    <label className={labelClass}>Category</label>
                     <select
                       value={category}
                       onChange={(e) => setCategory(e.target.value)}
-                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-purple-600"
+                      className={fieldClass}
                     >
-                      {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                      {CATEGORIES.map((c) => (
+                        <option key={c} value={c} className="bg-black">{c}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="flex-1">
-                    <label className="block text-sm text-gray-300 mb-1.5">Price (ETH)</label>
+                    <label className={labelClass}>Price (ETH)</label>
                     <input
                       value={priceEth}
                       onChange={(e) => setPriceEth(e.target.value)}
                       type="number"
                       step="0.0001"
                       min="0"
-                      className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-purple-600"
+                      className={fieldClass}
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm text-gray-300 mb-1.5">Prompt Text</label>
+                  <label className={labelClass}>Prompt Text</label>
                   <textarea
                     value={promptText}
                     onChange={(e) => {
@@ -303,23 +301,25 @@ export default function SellPage() {
                     }}
                     placeholder="Write your prompt here. Only buyers can decrypt it."
                     rows={7}
-                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-purple-600 resize-none"
+                    className={`${fieldClass} resize-none`}
                   />
                 </div>
 
-                {/* Live scoring preview */}
+                {/* Live scoring */}
                 {promptText && (
-                  <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex flex-col gap-3">
+                  <div className="border border-white/20 p-4 flex flex-col gap-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-400 font-semibold uppercase tracking-wide">Quality Preview</span>
-                      <span className="text-2xl font-bold text-green-400">{scores.confidence}</span>
+                      <span className="text-[9px] font-mono text-white/40 uppercase tracking-widest">
+                        Quality Preview
+                      </span>
+                      <span className="text-2xl font-mono font-bold text-green-400">{scores.confidence}</span>
                     </div>
                     <ScoreBar label="Specificity" value={scores.specificity} color="text-blue-400" />
-                    <ScoreBar label="Complexity" value={scores.complexity} color="text-purple-400" />
+                    <ScoreBar label="Complexity"  value={scores.complexity}  color="text-purple-400" />
                     {scores.badges.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-1">
                         {scores.badges.map((b) => (
-                          <span key={b} className="text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded-full">
+                          <span key={b} className="text-[9px] font-mono border border-white/10 text-white/30 px-1.5 py-0.5">
                             {b}
                           </span>
                         ))}
@@ -329,7 +329,7 @@ export default function SellPage() {
                 )}
 
                 {status && (
-                  <div className="bg-purple-950 border border-purple-800 rounded-lg px-4 py-3 text-purple-300 text-sm">
+                  <div className="border border-white/20 px-4 py-3 text-[10px] font-mono text-white/50">
                     {status}
                   </div>
                 )}
@@ -337,7 +337,7 @@ export default function SellPage() {
                 <button
                   onClick={handleList}
                   disabled={stage > 0 && !done}
-                  className="bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors"
+                  className="text-xs font-mono border border-white/40 text-white/70 py-3 uppercase tracking-widest hover:border-white hover:text-white hover:bg-white hover:text-black transition-all disabled:opacity-30"
                 >
                   {stage === 0 && 'Encrypt & List Prompt'}
                   {stage === 1 && 'Step 1/3: ECIES Encrypting...'}
@@ -358,49 +358,62 @@ export default function SellPage() {
           </div>
         </div>
 
-        {/* My Listings section */}
+        {/* My Listings */}
         {mounted && address && (
           <div className="mt-14">
-            <h2 className="text-xl font-bold text-white mb-1">My Listings</h2>
-            <p className="text-gray-400 text-sm mb-6">Prompts you have listed on PromptVault.</p>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-4 h-px bg-white/40" />
+              <h2 className="text-sm font-mono text-white uppercase tracking-wider">My Listings</h2>
+              <div className="flex-1 h-px bg-white/10" />
+            </div>
+            <p className="text-[10px] font-mono text-white/30 mb-5">Prompts you have listed on PromptVault.</p>
 
             {deactivateStatus && (
-              <div className="mb-4 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-300 text-sm">
+              <div className="mb-4 border border-white/20 px-4 py-3 text-[10px] font-mono text-white/50">
                 {deactivateStatus}
               </div>
             )}
 
             {myListings.length === 0 ? (
-              <p className="text-gray-500 text-sm">No listings yet. Use the form above to list your first prompt.</p>
+              <p className="text-[10px] font-mono text-white/20 uppercase tracking-wider">
+                No listings yet. Use the form above to list your first prompt.
+              </p>
             ) : (
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-2">
                 {myListings.map((l) => {
                   const avgRating = Number(l.totalRatings) > 0
                     ? (Number(l.ratingSum) / Number(l.totalRatings)).toFixed(1)
                     : '—';
                   return (
-                    <div key={l.id.toString()} className="bg-gray-900 border border-gray-800 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+                    <div
+                      key={l.id.toString()}
+                      className="border border-white/20 p-4 flex flex-col sm:flex-row sm:items-center gap-4"
+                    >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <span className="text-white font-semibold text-sm">{l.title}</span>
-                          <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full">{l.category}</span>
+                          <span className="text-xs font-mono text-white">{l.title}</span>
+                          <span className="text-[9px] font-mono border border-white/10 text-white/30 px-1.5 py-0.5">
+                            {l.category}
+                          </span>
                           {!l.isActive && (
-                            <span className="text-xs bg-red-950 text-red-400 border border-red-800 px-2 py-0.5 rounded-full">Deactivated</span>
+                            <span className="text-[9px] font-mono border border-red-500/30 text-red-400/60 px-1.5 py-0.5">
+                              DEACTIVATED
+                            </span>
                           )}
                         </div>
-                        <div className="flex flex-wrap gap-4 text-xs text-gray-400 mt-1">
-                          <span>Price: <span className="text-white font-mono">{formatEther(l.price)} ETH</span></span>
-                          <span>Sales: <span className="text-white">{l.totalRatings.toString()}</span> rated</span>
-                          <span>Avg rating: <span className="text-yellow-400">{avgRating}</span></span>
-                          <span>Specificity: <span className="text-blue-400">{l.specificityScore}</span></span>
-                          <span>ID: <span className="text-gray-500 font-mono">#{l.id.toString()}</span></span>
+                        <div className="flex flex-wrap gap-4 text-[9px] font-mono text-white/30">
+                          <span>PRICE: <span className="text-white/60">{formatEther(l.price)} ETH</span></span>
+                          <span>RATED: <span className="text-white/60">{l.totalRatings.toString()}</span></span>
+                          <span>AVG: <span className="text-yellow-400/60">{avgRating}</span></span>
+                          <span>SPEC: <span className="text-blue-400/60">{l.specificityScore}</span></span>
+                          <span>ID: <span className="text-white/20">#{l.id.toString()}</span></span>
                         </div>
                       </div>
                       {l.isActive && (
                         <button
                           onClick={() => handleDeactivate(l.id)}
                           disabled={deactivating === l.id}
-                          className="text-xs bg-red-950 hover:bg-red-900 border border-red-800 text-red-400 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 shrink-0"
+                          className="text-[9px] font-mono border border-red-500/20 text-red-400/50 px-3 py-1.5 hover:border-red-400/50 hover:text-red-400 transition-all disabled:opacity-30 shrink-0 uppercase"
                         >
                           {deactivating === l.id ? 'Deactivating...' : 'Deactivate'}
                         </button>

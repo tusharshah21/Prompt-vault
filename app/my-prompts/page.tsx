@@ -27,13 +27,13 @@ function StarPicker({
 }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-sm text-gray-400">{label}</span>
+      <span className="text-[9px] font-mono text-white/40 uppercase tracking-wider">{label}</span>
       <div className="flex gap-1">
         {[1, 2, 3, 4, 5].map((i) => (
           <button
             key={i}
             onClick={() => onChange(i)}
-            className={`text-xl transition-colors ${i <= value ? 'text-yellow-400' : 'text-gray-700 hover:text-gray-500'}`}
+            className={`text-base transition-colors ${i <= value ? 'text-yellow-400' : 'text-white/10 hover:text-white/30'}`}
           >
             ★
           </button>
@@ -59,7 +59,6 @@ function PurchasedListing({
   const { writeContractAsync: ratePrompt } = useRatePrompt();
 
   const [revealing, setRevealing] = useState(false);
-  // SECURITY: plaintext in RAM only. Never persisted or sent anywhere.
   const [plaintext, setPlaintext] = useState<string | null>(null);
   const [status, setStatus] = useState('');
   const [showRateForm, setShowRateForm] = useState(false);
@@ -68,7 +67,6 @@ function PurchasedListing({
   const [reusability, setReusability] = useState(0);
   const [rating, setRating] = useState(false);
 
-  // Wipe plaintext from RAM on unmount
   useEffect(() => {
     return () => { setPlaintext(null); };
   }, []);
@@ -93,7 +91,6 @@ function PurchasedListing({
 
       setStatus('Requesting MetaMask decryption...');
       const decryptedBytes = await eciesDecrypt(eciesHex, address);
-      // after decrypting: TextDecoder converts bytes → plaintext string
       setPlaintext(new TextDecoder().decode(decryptedBytes));
       setStatus('');
       if (!alreadyRated) setShowRateForm(true);
@@ -150,35 +147,39 @@ function PurchasedListing({
       />
 
       {status && (
-        <p className="text-xs text-purple-400 font-mono px-1">{status}</p>
+        <p className="text-[10px] font-mono text-white/50 px-1">{status}</p>
       )}
 
       <button
         onClick={handleReveal}
         disabled={revealing}
-        className="text-xs bg-green-900 hover:bg-green-800 text-green-300 font-mono px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+        className="text-[10px] font-mono border border-green-500/30 text-green-400/70 px-3 py-1.5 hover:border-green-400 hover:text-green-400 transition-all disabled:opacity-30 uppercase tracking-wider"
       >
-        {revealing ? 'Decrypting...' : 'Reveal Prompt'}
+        {revealing ? 'DECRYPTING...' : 'REVEAL PROMPT'}
       </button>
 
-      {/* Rate Prompt form — appears after reveal if not yet rated */}
       {showRateForm && !alreadyRated && (
-        <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 flex flex-col gap-3">
-          <h4 className="text-sm font-semibold text-white">Rate this prompt</h4>
-          <StarPicker label="Overall" value={overall} onChange={setOverall} />
+        <div className="border border-white/20 p-4 flex flex-col gap-3">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-3 h-px bg-white/30" />
+            <span className="text-[9px] font-mono text-white/40 uppercase tracking-widest">
+              Rate this prompt
+            </span>
+          </div>
+          <StarPicker label="Overall"       value={overall}       onChange={setOverall} />
           <StarPicker label="Effectiveness" value={effectiveness} onChange={setEffectiveness} />
-          <StarPicker label="Reusability" value={reusability} onChange={setReusability} />
-          <div className="flex gap-2">
+          <StarPicker label="Reusability"   value={reusability}   onChange={setReusability} />
+          <div className="flex gap-2 mt-1">
             <button
               onClick={handleRate}
               disabled={rating}
-              className="flex-1 text-sm bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white py-2 rounded-lg transition-colors"
+              className="flex-1 text-[10px] font-mono border border-white/30 text-white/60 py-2 hover:border-white hover:text-white hover:bg-white hover:text-black transition-all disabled:opacity-30 uppercase tracking-wider"
             >
               {rating ? 'Submitting...' : 'Submit Rating'}
             </button>
             <button
               onClick={() => setShowRateForm(false)}
-              className="text-sm bg-gray-800 hover:bg-gray-700 text-gray-400 px-4 py-2 rounded-lg transition-colors"
+              className="text-[10px] font-mono border border-white/10 text-white/30 px-4 py-2 hover:border-white/30 hover:text-white/50 transition-all uppercase"
             >
               Skip
             </button>
@@ -202,23 +203,38 @@ export default function MyPromptsPage() {
 
   if (!address) {
     return (
-      <div className="min-h-screen bg-gray-950">
+      <div className="min-h-screen bg-black">
         <Navbar />
         <main className="max-w-6xl mx-auto px-4 py-20 text-center">
-          <p className="text-gray-400">Connect your wallet to view purchased prompts.</p>
+          <p className="text-xs font-mono text-white/30 uppercase tracking-widest">
+            Connect your wallet to view purchased prompts.
+          </p>
         </main>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-950">
+    <div className="min-h-screen bg-black">
       <Navbar />
-      <main className="max-w-6xl mx-auto px-4 py-10">
-        <h1 className="text-3xl font-bold text-white mb-2">My Prompts</h1>
-        <p className="text-gray-400 mb-8">Prompts you have purchased. Click reveal to decrypt via MetaMask.</p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+      <main className="max-w-6xl mx-auto px-4 py-10">
+        {/* Page header */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-6 h-px bg-white/40" />
+            <span className="text-[10px] font-mono text-white/40 uppercase tracking-widest">004</span>
+            <div className="flex-1 h-px bg-white/10" />
+          </div>
+          <h1 className="text-2xl font-mono font-bold text-white uppercase tracking-wider mb-1">
+            My Prompts
+          </h1>
+          <p className="text-xs font-mono text-white/40">
+            Prompts you have purchased. Click reveal to decrypt via MetaMask.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {listings.map((listing) => (
             <PurchasedListing
               key={listing.id.toString()}
@@ -231,9 +247,11 @@ export default function MyPromptsPage() {
         </div>
 
         {listings.length === 0 && (
-          <p className="text-gray-500 text-center py-20">
+          <p className="text-[10px] font-mono text-white/20 text-center py-20 uppercase tracking-widest">
             No prompts found.{' '}
-            <a href="/browse" className="text-purple-400 underline">Browse the marketplace</a>.
+            <a href="/browse" className="text-white/40 underline hover:text-white transition-colors">
+              Browse the marketplace
+            </a>.
           </p>
         )}
       </main>
